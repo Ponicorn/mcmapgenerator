@@ -1,5 +1,8 @@
 const fs = require('fs')
+const { execSync } = require('child_process');
 const fetch = require('node-fetch')
+const decompress = require('decompress')
+const decompressTargz = require('decompress-targz')
 const configuration = require('./configuration/configuration.json')
 
 const username         = configuration.username
@@ -9,7 +12,8 @@ const realmurl         = configuration.realmurl
 const minecraftVersion = configuration.minecraftVersion
 const serverId         = configuration.serverId
 const serverSlot       = configuration.serverSlot
-const downloadFolder   = config.downloadFolder
+const downloadFolder   = configuration.downloadFolder
+const dlpath = `${downloadFolder}/mcmap.tar.gz`
 
 let authbody = {
     agent: {
@@ -50,7 +54,6 @@ fetch(`${authurl}/authenticate`, {
         if (!r.ok) reject()
         
         // On prépare le dl frère
-        let dlpath = `${downloadFolder}/mcmap.tar.gz`
         if (fs.existsSync(dlpath)) fs.unlinkSync(dlpath)
         const dest = fs.createWriteStream(dlpath)
 
@@ -58,7 +61,7 @@ fetch(`${authurl}/authenticate`, {
         r.body.pipe(dest)
             .on('open', () => {
                 // ça commence frère, croise les doigts !
-                console.log('debut du dl de la map')
+                console.log('début du dl de la map')
             })
             .on('error', (err) => {
                 // ça va planté frère
@@ -67,10 +70,23 @@ fetch(`${authurl}/authenticate`, {
             })
             .on('finish', () => {
                 // ouais frère, bien ouèj
+                console.log('dl de la map terminé')
+                console.log('début de la décompression')
                 resolve()
             })
     }))
+    .then(() => decompress(dlpath, downloadFolder, { plugins: [ decompressTargz() ] }))
     .then(() => {
-        // On va se dezip la map frère
-        console.log('noice')
+        console.log('décompression terminée')
+        if (fs.existsSync(dlpath)) fs.unlinkSync(dlpath)
+        console.log('début de la génération de la carte web')
+
+        let mapFolder = `${downloadFolder}\\world`
+        let publicFolder = `.\\public`
+
+        let stdout = execSync('mapcrafter -b -c configuration\\render.conf')
+        console.log('c\'est bon frère, c\'est fait')
+    })
+    .catch(err => {
+        console.error(err)
     })
