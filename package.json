@@ -1,0 +1,12 @@
+{
+  "name": "minecraftmapfetcher",
+  "version": "1.0.0",
+  "description": "donwload map from realm api, generate html rendering",
+  "main": "index.js",
+  "author": "Ponicorn<tougrer@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "node-fetch": "^2.3.0"
+  }
+}
