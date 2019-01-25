@@ -6,7 +6,5 @@
     "minecraftVersion": "1.13.2",
     "serverId": "",
     "serverSlot": "1",
-    "downloadFolder": "",
-    "buildFolder": "",
-    "mapcrafter": "mapcrafter"
+    "downloadFolder": ""
 }

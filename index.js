@@ -1,7 +1,9 @@
 const fs = require('fs')
+const path = require('path')
 const { spawn } = require('child_process');
 const fetch = require('node-fetch')
 const decompress = require('decompress')
+const rimraf = require('rimraf')
 const decompressTargz = require('decompress-targz')
 const configuration = require('./configuration/configuration.json')
 
@@ -12,8 +14,12 @@ const realmurl         = configuration.realmurl
 const minecraftVersion = configuration.minecraftVersion
 const serverId         = configuration.serverId
 const serverSlot       = configuration.serverSlot
-const downloadFolder   = configuration.downloadFolder
-const dlpath = `${downloadFolder}/mcmap.tar.gz`
+const downloadFolder   = path.normalize(configuration.downloadFolder)
+const mapcrafter = configuration.mapcrafter
+
+const dlpath = path.join(downloadFolder,'mcmap.tar.gz')
+const worldpath = path.join(downloadFolder, 'world')
+mapcrafter.configurationFile = path.normalize(mapcrafter.configurationFile)
 
 let authbody = {
     agent: {
@@ -23,7 +29,7 @@ let authbody = {
 	username,
     password,
 }
-
+log('Authentification a l\'API mojang')
 // On s'authentifie ici
 fetch(`${authurl}/authenticate`, {
     method: 'POST',
@@ -40,12 +46,16 @@ fetch(`${authurl}/authenticate`, {
 
         // On prépare l'auth avec le cookie
         let cookie = `sid=token:${accessToken}:${uuid};user=${name};version=${minecraftVersion}`
+
+        log('Récupération du lien de téléchargement')
         return fetch(`${realmurl}/worlds/${serverId}/slot/${serverSlot}/download`, {
             headers: { cookie }
         })
     })
     .then(r => r.json())
     .then(json => {
+        log('Préparation au téléchargement de la carte')
+        if (fs.existsSync(dlpath)) fs.unlinkSync(dlpath)
         let downloadLink = json.downloadLink
         return fetch(downloadLink)
     })
@@ -56,61 +66,62 @@ fetch(`${authurl}/authenticate`, {
         // On prépare le dl frère
         if (fs.existsSync(dlpath)) fs.unlinkSync(dlpath)
         const dest = fs.createWriteStream(dlpath)
-
         // On fait pété tout ça frère
         r.body.pipe(dest)
             .on('open', () => {
                 // ça commence frère, croise les doigts !
-                console.log('début du dl de la map')
+                log('début du téléchargement')
             })
             .on('error', (err) => {
                 // ça va planté frère
-                console.error(err)
+                log(err.toString(), true)
                 reject(err)
             })
             .on('finish', () => {
                 // ouais frère, bien ouèj
-                console.log('dl de la map terminé')
-                console.log('début de la décompression')
+                log('Téléchargement de la carte terminé')
+                log('Préparation a la décompression de la carte')
+                if (fs.existsSync(worldpath)) rimraf.sync(worldpath)
                 resolve()
             })
     }))
     .then(() => decompress(dlpath, downloadFolder, { plugins: [ decompressTargz() ] }))
     .then(() => {
-        console.log('décompression terminée')
-        if (fs.existsSync(dlpath)) fs.unlinkSync(dlpath)
-        console.log('début de la génération de la carte web')
-
-        let mapFolder = `${downloadFolder}\\world`
-        let publicFolder = `.\\public`
-        let cmd = 'mapcrafter -b -c configuration\\render.conf'
-
+        log('Décompression terminé')
+        
         return new Promise((resolve, reject) => {
-            let spawncmd = spawn('mapcrafter', ['-b','-j','2', '-c', 'configuration\\render.conf'])
-            let error = false
-            
+            log('Préparation de la génération de la carte web')
+            log(`${mapcrafter.cmd} -b -j ${mapcrafter.cpusThreads} -c ${mapcrafter.configurationFile}`)
+            let spawncmd = spawn(mapcrafter.cmd, ['-b','-j',mapcrafter.cpusThreads, '-c', mapcrafter.configurationFile])
+
             // En cas de log
-            spawncmd.stdout.on('data', data => console.log(data.toString()))
+            spawncmd.stdout.on('data', data => log(data.toString(), false, false))
 
             // En cas d'erreur
-            spawncmd.stderr.on('data', data => {
-                error = true
-                console.error(data.toString())
-            })
+            spawncmd.stderr.on('data', data => log(data.toString(), true, false))
 
             // En cas de fin
             spawncmd.on('exit', (code) => {
-                console.log('code: ', code)
-                if (error)
-                    reject('un problème est survenu durant la generation')
-                else 
-                    resolve()
+                log(`Génération terminée, le processus a quitté avec le code: ${code}`)
+                resolve()
             })
         })
     })
     .then(() => {
-        console.log('c\'est bon frère, c\'est fait')
+        // Nettoyage du dossier de telechargement
+        if (fs.existsSync(dlpath)) fs.unlinkSync(dlpath)
+        // if (fs.existsSync(worldpath)) rimraf.sync(worldpath)
+        log('Processus terminé, vous pouvez retrouvez votre carte dans le dossier configuré !')
     })
-    .catch(err => {
-        console.error(err)
-    })
+    .catch(err => log(err.toString(), true))
+
+// Fonction pour.. bah log quoi
+function log (logmsg, error = false, showdate = true) {
+    let date = ''
+    let info = error ? ' [ERROR] ' : ' [INFO] '
+    if (showdate) date = new Date().toISOString() + info
+    if (error) return process.stderr.write(`${date}${logmsg}\n`)
+    process.stdout.write(`${date}${logmsg}\n`)
+}
+
+// Suppression eventuel du dossier passé en param
