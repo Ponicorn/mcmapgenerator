@@ -1,5 +1,5 @@
 const fs = require('fs')
-const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 const fetch = require('node-fetch')
 const decompress = require('decompress')
 const decompressTargz = require('decompress-targz')
@@ -83,8 +83,32 @@ fetch(`${authurl}/authenticate`, {
 
         let mapFolder = `${downloadFolder}\\world`
         let publicFolder = `.\\public`
+        let cmd = 'mapcrafter -b -c configuration\\render.conf'
 
-        let stdout = execSync('mapcrafter -b -c configuration\\render.conf')
+        return new Promise((resolve, reject) => {
+            let spawncmd = spawn('mapcrafter', ['-b','-j','2', '-c', 'configuration\\render.conf'])
+            let error = false
+            
+            // En cas de log
+            spawncmd.stdout.on('data', data => console.log(data.toString()))
+
+            // En cas d'erreur
+            spawncmd.stderr.on('data', data => {
+                error = true
+                console.error(data.toString())
+            })
+
+            // En cas de fin
+            spawncmd.on('exit', (code) => {
+                console.log('code: ', code)
+                if (error)
+                    reject('un problème est survenu durant la generation')
+                else 
+                    resolve()
+            })
+        })
+    })
+    .then(() => {
         console.log('c\'est bon frère, c\'est fait')
     })
     .catch(err => {
